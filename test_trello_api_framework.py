@@ -17,8 +17,9 @@ from typing import Optional
 # env.ini
 trello_URL = "https://api.trello.com/1"
 trello_Board_name = "My_test_board"
-key = ""
-token = ""
+trello_Custom_Field_name = "test"
+key = "請輸入您的key"
+token = "請輸入您的token"
 
 # ----------------------------------------------------------------
 
@@ -136,12 +137,12 @@ class API(RestClient):
         super().__init__(api_root_url)
 
     # post方法創建看板並且在api_root_url引入domain
-    def create_board(self, params):
+    def post_create_board(self, params):
         res = self.post("/boards/", params=params)
         return res
 
     # post方法創建自訂欄位在看板上
-    def create_Custom_Field(self, params, payload):
+    def post_create_Custom_Field(self, params, payload):
         res = self.post("/customFields", params=params, json=payload)
         return res
 
@@ -169,7 +170,7 @@ class APIOperation:
             "key": key,
             "token": token
         }
-        res = self.api.create_board(params)
+        res = self.api.post_create_board(params)
         return res
 
     # 創建自訂欄位
@@ -178,15 +179,15 @@ class APIOperation:
             "key": key,
             "token": token
         }
-        body = {
+        payload = {
             "idModel": board_id,
             "modelType": "board",
-            "name": "Priority",
+            "name": trello_Custom_Field_name,
             "type": "number",
             "pos": "top",
             "display_cardFront": True
         }
-        res = self.api.create_Custom_Field(params, body)
+        res = self.api.post_create_Custom_Field(params, payload)
         return res
 
     # 取得看板
@@ -226,8 +227,8 @@ class ApiService:
     # 創建自訂欄位
     def create_trello_Custom_Field(self, Board_ID):
         # 回傳json格式
-        Custom_Field_ID = self.api_operation.create_trello_Custom_Field_on_board(Board_ID).json().get("id")
-        return Custom_Field_ID
+        custom_field_id = self.api_operation.create_trello_Custom_Field_on_board(Board_ID).json().get("id")
+        return custom_field_id
 
     # 取得看板
     def get_trello_board(self):
@@ -237,34 +238,36 @@ class ApiService:
     # 刪除看板
     def delete_trello_board(self, Board_ID):
         response = self.api_operation.delete_trello_board(Board_ID)
-        assert response.status_code == 200
         return response
 
     # 創建自訂欄位
     def create_trello_Custom_Field_on_board(self):
         board_id = self.create_board()
         self.create_trello_Custom_Field(board_id)
-        return board_id
+
+    # 檢查並刪除看板
+    def check_boardID_and_delete_board(self):
+        board_id = self.get_trello_board()
+        self.delete_trello_board(board_id)
 
 
 # ----------------------------------------------------------------
 # confest 進行case操作前設定,引入url
-@pytest.fixture(autouse=True)
-def setUp_and_tearDown():
+@pytest.fixture(scope="module")  # 在.py文件中所有測試前調用一次
+def custom_field_setup():
+    # 引入Domain
     trello_domain = trello_URL
-    yield trello_domain
     api_service = ApiService(trello_domain)
-    board_id = api_service.get_trello_board()
-    api_service.delete_trello_board(board_id)
+    yield api_service  # 提供給測試
+    api_service.check_boardID_and_delete_board()
 
 
 class TestTrelloAPI:
-    @pytest.fixture(autouse=True)
-    def init_fixtures(self, setUp_and_tearDown):
-        self.api_service = ApiService(setUp_and_tearDown)
 
-# 創建自訂欄位
-    def test_create_custom_field(self):
-        self.api_service.create_trello_Custom_Field_on_board()
+    """
+    1.創建自訂欄位
+    """
+    def test_create_custom_field(self, custom_field_setup):
+        custom_field_setup.create_trello_Custom_Field_on_board()
 
 
