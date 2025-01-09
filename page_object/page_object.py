@@ -8,37 +8,54 @@ from selenium.common.exceptions import TimeoutException
 
 #-------------------------------------------------------------------------------------------------------------
 #element會用到的功能
+class CustomTimeoutException(Exception):
+    
+    def __init__(self, message):
+        super().__init__(message)
+
 class Basepage:
     
     def __init__(self,driver):  
         self.driver = driver
-             
-    def find_ele(self,xpath):
-        return self.driver.find_element(By.XPATH,xpath)
+          
+    def find_ele_after_visible(self,xpath,ele_name,timelimit = 10):
+        try:
+            element = WebDriverWait(self.driver, timelimit).until(EC.visibility_of_element_located((By.XPATH, xpath)))
     
-    def find_ele_after_present(self,xpath,timelimit = 10):
-        return WebDriverWait(self.driver, timelimit).until(
-    EC.presence_of_element_located((By.XPATH, xpath))
-)
+            if element:
+                return element
+            element = WebDriverWait(self.driver, timelimit).until(EC.presence_of_element_located((By.XPATH, xpath)))
     
-    def find_ele_after_visible(self,xpath,timelimit = 10):
-        return WebDriverWait(self.driver, timelimit).until(
-    EC.visibility_of_element_located((By.XPATH, xpath))
-)
+            if element:
+                self.driver.execute_script('arguments[0].scrollIntoView({ block: "center", inline: "center" });', element)
+                element = WebDriverWait(self.driver, timelimit).until(EC.visibility_of_element_located((By.XPATH, xpath)))
+                return element
+        except TimeoutException:
+            raise CustomTimeoutException(f"Element [{ele_name}]was unvisiable within {timelimit} seconds.")
+        
+
+    def find_ele_after_clickable(self,xpath,ele_name,timelimit = 10):
+        try:
+            element = WebDriverWait(self.driver, timelimit).until(EC.element_to_be_clickable((By.XPATH, xpath)))
     
-    def find_ele_after_clickable(self,xpath,timelimit = 10):
-        return WebDriverWait(self.driver, timelimit).until(
-    EC.element_to_be_clickable((By.XPATH, xpath))
-)
+            if element:
+                return element
+            element = WebDriverWait(self.driver, timelimit).until(EC.presence_of_element_located((By.XPATH, xpath)))
     
-    def find_ele_after_located(self,xpath,timelimit = 10):
-        return WebDriverWait(self.driver, timelimit).until(
-    EC.presence_of_all_elements_located((By.XPATH, xpath))
-)
-    
+            if element:
+                self.driver.execute_script('arguments[0].scrollIntoView({ block: "center", inline: "center" });', element)
+                mouse = ActionChains(self.driver)
+                mouse.move_to_element(element).perform()
+                element = WebDriverWait(self.driver, timelimit).until(EC.element_to_be_clickable((By.XPATH, xpath)))
+                return element
+        except TimeoutException:
+            raise CustomTimeoutException(f"Element [{ele_name}]was unclickable within {timelimit} seconds.")
+
+     
+ 
 #--------------------------------------------------------------------------------------------------------------------------------
 #定位器
-trello_page_locator = {  #這是本地的locator，已同步完畢
+trello_page_locator = {  
     #輸入信箱的地方
     'input_email':'//*[@id="username"]',
     #輸入密碼的地方
@@ -94,7 +111,7 @@ trello_page_locator = {  #這是本地的locator，已同步完畢
     #確認刪除按鈕
     'delete_confirm':'//*[contains(@data-testid,"popover-confirm")]',
     #新增卡片按鈕
-    'create_card_bUtton':'//*[contains(normalize-space(),"測試用列表")]/following-sibling::*//button[contains(@data-testid,"list-add")]',
+    'create_card_button':'//*[contains(normalize-space(),"測試用列表")]/following-sibling::*//button[contains(@data-testid,"list-add")]',
     #新卡片名稱輸入欄位
     'new_cardname_input':'//textarea[contains(@data-testid,"list-card")]',
     #確認新增卡片
@@ -124,80 +141,18 @@ trello_page_locator = {  #這是本地的locator，已同步完畢
 
 #-------------------------------------------------------------------------------------------------------------------
 #operator
-class operator(Basepage):
+class Operator(Basepage):
     
     def __init__(self,driver):
         super().__init__(driver)
         self.locator = trello_page_locator
     
     def click_button(self,element_name):
-        button_to_click = self.find_ele_after_clickable(self.locator[element_name])
+        button_to_click = self.find_ele_after_clickable(self.locator[element_name],element_name)
         button_to_click.click()
 
     def send_keys_to_element(self,element_name,text_to_send):
-        text_area = self.find_ele_after_visible(self.locator[element_name])
+        text_area = self.find_ele_after_visible(self.locator[element_name],element_name)
         text_area.send_keys(text_to_send)
     
-    def move_mouse_to_element(self,element_name):
-        mouse = ActionChains(self.driver)
-        element = self.find_ele_after_present(self.locator[element_name])
-        mouse.move_to_element(element).perform()
-
-
-
-#-------------------------------------------------------------------------------------------------------------------
-#登入    
-class prepare(operator):
-    def __init__(self,driver):
-        super().__init__(driver)
-    
-    def login(self,URL,email,pwd):
-        self.driver.get(URL)
-        self.send_keys_to_element('input_email',email)
-        self.click_button('login_submit')
-        self.send_keys_to_element('input_password',pwd)
-        self.click_button('login_submit')
-    
-    def into_workspace(self):
-        self.click_button('workspace_switcher')
-        self.click_button('into_workspace')
-
-#------------------------------------------------------------------------------------------------------------------
-class service(operator):
-    def __init__(self,driver):
-        super().__init__(driver)
-
-    def create_board(self,board_title):
-        self.click_button('create_board_button')
-        self.send_keys_to_element('input_board_title',board_title)
-        self.click_button('create_board_submit')
-
-    def delete_board(self):
-        self.move_mouse_to_element('board_overflow_menu')
-        self.click_button('board_overflow_menu')
-        self.click_button('close_board')
-        self.click_button('confirm_close_board')
-        self.click_button('check_closed_board')
-        self.click_button('delete_board')
-        self.click_button('delete_board_confirm')
-        self.click_button('leave_closed_board')
-
-
-
-
-#-------------------------------------------------------------------------------------------------------------------
-driver = webdriver.Firefox()
-A = prepare(driver)
-A.login("https://trello.com/login","lesterjack93@yahoo.com.tw","trello0968141018")
-A.into_workspace()
-B = service(driver)
-B.create_board("測試用看板")
-B.delete_board()
-
-
-
-
-
-
-
-
+ 
